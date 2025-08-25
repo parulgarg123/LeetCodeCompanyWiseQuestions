@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeetCode Company Questions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .filters {
+            background: #f8f9fa;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .difficulty-Easy { color: #00b8a3; font-weight: bold; }
+        .difficulty-Medium { color: #ffc01e; font-weight: bold; }
+        .difficulty-Hard { color: #ff375f; font-weight: bold; }
+        .table th { 
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .table th:hover {
+            background-color: #f8f9fa;
+        }
+        .table th.sorted-asc::after {
+            content: " ↑";
+        }
+        .table th.sorted-desc::after {
+            content: " ↓";
+        }
+        .question-link {
+            color: inherit;
+            text-decoration: none;
+        }
+        .question-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="text-center mb-4">LeetCode Company Questions</h1>
+        
+        <div class="filters mb-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Select Company</label>
+                    <select id="companyFilter" class="form-select">
+                        <option value="">Choose a company...</option>
+                    </select>
+                </div>
+                <div id="additionalFilters" style="display: none;">
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-3">
+                            <label class="form-label">Time Period</label>
+                            <select id="timeFilter" class="form-select">
+                                <option value="">Choose time period...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Difficulty (Optional)</label>
+                            <select id="difficultyFilter" class="form-select">
+                                <option value="">All Difficulties</option>
+                                <option value="Easy">Easy</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Hard">Hard</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Search (Optional)</label>
+                            <input type="text" id="searchInput" class="form-control" placeholder="Search questions...">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <div id="resultsInfo" class="alert alert-info mb-3" style="display: none;">
+            Showing <span id="questionCount">0</span> questions
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width: 50px;">No.</th>
+                        <th data-sort="number" class="text-center">ID</th>
+                        <th data-sort="title">Title</th>
+                        <th data-sort="company">Company</th>
+                        <th data-sort="difficulty">Difficulty</th>
+                        <th data-sort="acceptance" class="text-end">Acceptance %</th>
+                        <th data-sort="frequency" class="text-end">Frequency %</th>
+                        <th data-sort="timeframe">Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="questions">
+                    <!-- Questions will be dynamically inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const owner = "parulgarg123";
+        const repo = "leetcode-companywise-interview-questions";
+        const token = "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";
+        
+        // Application state
+        const questionCache = new Map();
+        let allQuestions = [];
+        let sortColumn = 'number';
+        let sortDirection = 'asc';
+        let currentFilePath = '';  // Track current selected file
+        let currentCompany = '';   // Track current selected company
+        
+        async function loadCompanies() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+
+            try {
+                console.log('Fetching company list...');
+                const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                if (!repoResponse.ok) {
+                    throw new Error('Failed to fetch repository contents');
+                }
+                
+                const contents = await repoResponse.json();
+                const companies = contents.filter(item => item.type === 'dir');
+                companies.sort((a, b) => a.name.localeCompare(b.name));
+
+                const companyFilter = document.getElementById('companyFilter');
+                companyFilter.innerHTML = '<option value="">Choose a company...</option>';
+                companies.forEach(company => {
+                    const option = document.createElement('option');
+                    option.value = company.path;
+                    option.textContent = company.name;
+                    companyFilter.appendChild(option);
+                });
+
+                if (companies.length > 0) {
+                    showMessage(`Select a company to view available time periods.`, 'info');
+                } else {
+                    showMessage('No company folders found in the repository.', 'warning');
+                }
+            } catch (error) {
+                console.error('Error loading companies:', error);
+                showMessage(error.message, 'danger');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        async function loadTimeFrames(companyPath) {
+            if (!companyPath) {
+                document.getElementById('additionalFilters').style.display = 'none';
+                allQuestions = [];
+                filterAndDisplayQuestions();
+                return;
+            }
+
+            try {
+                const folderResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${companyPath}`, {
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                if (!folderResponse.ok) {
+                    throw new Error(`Failed to fetch company data: ${folderResponse.statusText}`);
+                }
+
+                const files = await folderResponse.json();
+                const csvFiles = files.filter(file => file.name.endsWith('.csv'));
+
+                // Update timeframe dropdown
+                const timeFilter = document.getElementById('timeFilter');
+                timeFilter.innerHTML = '<option value="">Choose time period...</option>';
+                csvFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.path;
+                    option.textContent = file.name.replace('.csv', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    timeFilter.appendChild(option);
+                });
+
+                document.getElementById('additionalFilters').style.display = 'block';
+
+                if (csvFiles.length === 0) {
+                    showMessage(`No data files found for ${companyPath.split('/').pop()}`, 'warning');
+                }
+            } catch (error) {
+                showMessage(error.message, 'danger');
+            }
+        }
+
+        async function fetchCompanyQuestions(filePath) {
+            if (!filePath) {
+                document.getElementById('resultsInfo').style.display = 'none';
+                showMessage('Please select a time period.', 'warning');
+                return;
+            }
+
+            if (questionCache.has(filePath)) {
+                allQuestions = questionCache.get(filePath);
+                filterAndDisplayQuestions();
+                return;
+            }
+
+            const loading = document.getElementById('loading');
+            const questionsContainer = document.getElementById('questions');
+            loading.style.display = 'block';
+            questionsContainer.innerHTML = '';
+
+            try {
+                const contentResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, {
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3.raw'
+                    }
+                });
+                if (!contentResponse.ok) {
+                    throw new Error(`Failed to fetch file: ${contentResponse.statusText}`);
+                }
+
+                const content = await contentResponse.text();
+                currentFilePath = filePath;      // Store the current file path
+                currentCompany = filePath.split('/')[0];  // Store company name
+                const questions = parseCSVContent(content, currentCompany);
+
+                if (questions.length === 0) {
+                    throw new Error(`No questions found in ${filePath}`);
+                }
+
+                questionCache.set(filePath, questions);
+                allQuestions = questions;
+                filterAndDisplayQuestions();
+            } catch (error) {
+                showMessage(error.message, 'danger');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function parseCSVContent(content, company) {
+            const questions = [];
+            // Skip header row and split into lines
+            const lines = content.split('\n').slice(1);
+            
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                try {
+                    // Parse CSV while handling quoted fields
+                    const parts = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g)
+                        .map(part => part.replace(/^,|""/g, ''))
+                        .map(part => part.replace(/^"|"$/g, ''))
+                        .map(part => part.trim());
+
+                    if (parts.length >= 6) {
+                        const number = parts[0].trim();
+                        const url = parts[1].trim();
+                        const title = parts[2].trim();
+                        const difficulty = parts[3].trim();
+                        
+                        // Parse percentages from CSV
+                        const acceptance = parseFloat(parts[4].replace('%', '')) || 0;
+                        const frequency = parseFloat(parts[5].replace('%', '')) || 0;
+
+                        if (title && difficulty) {
+                            questions.push({
+                                number,
+                                title,
+                                url,
+                                difficulty,
+                                acceptance,
+                                frequency,
+                                timeframe: currentFilePath.split('/').pop().replace('.csv', '').replace(/_/g, ' '),
+                                company
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Failed to parse CSV line:', line, err);
+                }
+            }
+
+            return questions;
+        }
+
+        function filterAndDisplayQuestions() {
+            const searchTerm = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+            const difficultyFilter = document.getElementById('difficultyFilter')?.value || '';
+
+            const filteredQuestions = allQuestions.filter(question => {
+                const matchesSearch = searchTerm === '' || question.title.toLowerCase().includes(searchTerm);
+                const matchesDifficulty = !difficultyFilter || question.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
+                return matchesSearch && matchesDifficulty;
+            });
+
+            displayQuestions(filteredQuestions);
+        }
+
+        function displayQuestions(questions) {
+            const container = document.getElementById('questions');
+            const sortedQuestions = sortQuestions(questions);
+            
+            const count = sortedQuestions.length;
+            document.getElementById('questionCount').textContent = count;
+            document.getElementById('resultsInfo').style.display = count > 0 ? 'block' : 'none';
+
+            container.innerHTML = sortedQuestions.map((question, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${question.number}</td>
+                    <td>
+                        <a href="${question.url}"
+                           target="_blank"
+                           class="question-link">
+                            ${escapeHtml(question.title)}
+                        </a>
+                    </td>
+                    <td>${question.company}</td>
+                    <td><span class="difficulty-${question.difficulty}">${question.difficulty}</span></td>
+                    <td class="text-end">${isNaN(question.acceptance) ? 'N/A' : question.acceptance.toFixed(1) + '%'}</td>
+                    <td class="text-end">${isNaN(question.frequency) ? 'N/A' : question.frequency.toFixed(1) + '%'}</td>
+                    <td>${currentFilePath.split('/').pop().replace('.csv', '').replace(/_/g, ' ')}</td>
+                </tr>
+            `).join('');
+
+            document.querySelectorAll('th[data-sort]').forEach(th => {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+                if (th.dataset.sort === sortColumn) {
+                    th.classList.add(sortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc');
+                }
+            });
+        }
+
+        function sortQuestions(questions) {
+            return [...questions].sort((a, b) => {
+                let aVal = a[sortColumn];
+                let bVal = b[sortColumn];
+                
+                if (['number', 'acceptance', 'frequency', 'timeframe'].includes(sortColumn)) {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                }
+                
+                if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function showMessage(message, type = 'danger') {
+            document.getElementById('resultsInfo').style.display = 'none';
+            const questionsContainer = document.getElementById('questions');
+            questionsContainer.innerHTML = `
+                <tr>
+                    <td colspan="8">
+                        <div class="alert alert-${type} m-0" role="alert">
+                            ${message}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Event listeners
+        document.getElementById('searchInput').addEventListener('input', filterAndDisplayQuestions);
+        document.getElementById('companyFilter').addEventListener('change', (e) => loadTimeFrames(e.target.value));
+        document.getElementById('timeFilter').addEventListener('change', (e) => fetchCompanyQuestions(e.target.value));
+        document.getElementById('difficultyFilter').addEventListener('change', filterAndDisplayQuestions);
+
+        // Column sorting
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const column = th.dataset.sort;
+                if (sortColumn === column) {
+                    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortColumn = column;
+                    sortDirection = 'asc';
+                }
+                filterAndDisplayQuestions();
+            });
+        });
+
+        // Initial load
+        loadCompanies();
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
