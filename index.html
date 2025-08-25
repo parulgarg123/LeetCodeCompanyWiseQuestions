@@ -113,9 +113,8 @@
     </div>
 
     <script>
-        const owner = "parulgarg123";
+        const owner = "snehasishroy";
         const repo = "leetcode-companywise-interview-questions";
-        const token = "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";
         
         // Application state
         const questionCache = new Map();
@@ -133,12 +132,14 @@
                 console.log('Fetching company list...');
                 const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
                     headers: {
-                        'Authorization': `token ${token}`,
                         'Accept': 'application/vnd.github.v3+json'
                     }
                 });
                 if (!repoResponse.ok) {
-                    throw new Error('Failed to fetch repository contents');
+                    const errorMessage = repoResponse.status === 403 
+                        ? 'Rate limit exceeded. Please try again later.' 
+                        : 'Failed to fetch repository contents';
+                    throw new Error(errorMessage);
                 }
                 
                 const contents = await repoResponse.json();
@@ -178,12 +179,14 @@
             try {
                 const folderResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${companyPath}`, {
                     headers: {
-                        'Authorization': `token ${token}`,
                         'Accept': 'application/vnd.github.v3+json'
                     }
                 });
                 if (!folderResponse.ok) {
-                    throw new Error(`Failed to fetch company data: ${folderResponse.statusText}`);
+                    const errorMessage = folderResponse.status === 403 
+                        ? 'Rate limit exceeded. Please try again later.' 
+                        : `Failed to fetch company data: ${folderResponse.statusText}`;
+                    throw new Error(errorMessage);
                 }
 
                 const files = await folderResponse.json();
@@ -230,12 +233,14 @@
             try {
                 const contentResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, {
                     headers: {
-                        'Authorization': `token ${token}`,
                         'Accept': 'application/vnd.github.v3.raw'
                     }
                 });
                 if (!contentResponse.ok) {
-                    throw new Error(`Failed to fetch file: ${contentResponse.statusText}`);
+                    const errorMessage = contentResponse.status === 403 
+                        ? 'Rate limit exceeded. Please try again later.' 
+                        : `Failed to fetch file: ${contentResponse.statusText}`;
+                    throw new Error(errorMessage);
                 }
 
                 const content = await contentResponse.text();
@@ -251,7 +256,8 @@
                 allQuestions = questions;
                 filterAndDisplayQuestions();
             } catch (error) {
-                showMessage(error.message, 'danger');
+                const errorMessage = error.message;
+                showMessage(errorMessage, errorMessage.includes('Rate limit') ? 'warning' : 'danger');
             } finally {
                 loading.style.display = 'none';
             }
