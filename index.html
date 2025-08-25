@@ -76,6 +76,14 @@
                             <label class="form-label">Search (Optional)</label>
                             <input type="text" id="searchInput" class="form-control" placeholder="Search questions...">
                         </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status (Optional)</label>
+                            <select id="statusFilter" class="form-select" onchange="filterAndDisplayQuestions()">
+                                <option value="">All Questions</option>
+                                <option value="completed">Completed</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -95,6 +103,7 @@
             <table class="table table-striped table-hover">
                 <thead class="table-light">
                     <tr>
+                        <th class="text-center" style="width: 40px;">✓</th>
                         <th class="text-center" style="width: 50px;">No.</th>
                         <th data-sort="number" class="text-center">ID</th>
                         <th data-sort="title">Title</th>
@@ -312,11 +321,19 @@
         function filterAndDisplayQuestions() {
             const searchTerm = document.getElementById('searchInput')?.value?.toLowerCase() || '';
             const difficultyFilter = document.getElementById('difficultyFilter')?.value || '';
+            const statusFilter = document.getElementById('statusFilter')?.value || '';
 
             const filteredQuestions = allQuestions.filter(question => {
                 const matchesSearch = searchTerm === '' || question.title.toLowerCase().includes(searchTerm);
                 const matchesDifficulty = !difficultyFilter || question.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
-                return matchesSearch && matchesDifficulty;
+                
+                // Check completion status
+                const isCompleted = localStorage.getItem(`leetcode_solved_${question.number}`) === 'true';
+                const matchesStatus = !statusFilter || 
+                    (statusFilter === 'completed' && isCompleted) ||
+                    (statusFilter === 'pending' && !isCompleted);
+                
+                return matchesSearch && matchesDifficulty && matchesStatus;
             });
 
             displayQuestions(filteredQuestions);
@@ -331,8 +348,15 @@
             document.getElementById('resultsInfo').style.display = count > 0 ? 'block' : 'none';
 
             container.innerHTML = sortedQuestions.map((question, index) => `
-                <tr>
-                    <td class="text-center">${index + 1}</td>
+                <tr class="${localStorage.getItem(`leetcode_solved_${question.number}`) === 'true' ? 'table-success text-muted' : ''}">
+                        <td class="text-center">
+                            <input type="checkbox" 
+                                   class="form-check-input" 
+                                   data-question-id="${question.number}"
+                                   ${localStorage.getItem(`leetcode_solved_${question.number}`) === 'true' ? 'checked' : ''}
+                                   onchange="toggleQuestionStatus(this, '${question.number}')">
+                        </td>
+                        <td class="text-center">${index + 1}</td>
                     <td class="text-center">${question.number}</td>
                     <td>
                         <a href="${question.url}"
@@ -355,6 +379,7 @@
                     th.classList.add(sortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc');
                 }
             });
+            updateCompletedCount();
         }
 
         function sortQuestions(questions) {
@@ -378,7 +403,7 @@
             const questionsContainer = document.getElementById('questions');
             questionsContainer.innerHTML = `
                 <tr>
-                    <td colspan="8">
+                    <td colspan="9">
                         <div class="alert alert-${type} m-0" role="alert">
                             ${message}
                         </div>
@@ -415,6 +440,30 @@
                 filterAndDisplayQuestions();
             });
         });
+
+        // Handle question completion status
+        function toggleQuestionStatus(checkbox, questionId) {
+            localStorage.setItem(`leetcode_solved_${questionId}`, checkbox.checked);
+            updateCompletedCount();
+            
+            // Update row styling
+            const row = checkbox.closest('tr');
+            if (checkbox.checked) {
+                row.classList.add('table-success', 'text-muted');
+            } else {
+                row.classList.remove('table-success', 'text-muted');
+            }
+        }
+
+        function updateCompletedCount() {
+            const total = allQuestions.length;
+            const completed = allQuestions.filter(q => 
+                localStorage.getItem(`leetcode_solved_${q.number}`) === 'true'
+            ).length;
+            
+            const countInfo = document.getElementById('questionCount');
+            countInfo.innerHTML = `${completed}/${total} completed`;
+        }
 
         // Initial load
         loadCompanies();
