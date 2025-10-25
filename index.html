@@ -784,6 +784,7 @@
         const PROGRESS_FILE_NAME = 'leetcode_progress.json';
         const GOOGLE_TOKEN_KEY = 'google_access_token';
         const GOOGLE_TOKEN_EXPIRY_KEY = 'google_token_expiry';
+        const TOKEN_EXPIRY_BUFFER_MS = 50 * 60 * 1000; // 50 minutes (safe buffer before 1-hour OAuth expiry)
         let accessToken = localStorage.getItem(GOOGLE_TOKEN_KEY);
         let lastSyncTimestamp = null;
 
@@ -947,8 +948,7 @@
                             localStorage.setItem(GOOGLE_TOKEN_KEY, accessToken);
                             
                             // Set token expiry (Google OAuth tokens typically expire in 1 hour)
-                            // Set expiry to 50 minutes to be safe
-                            const expiryTime = Date.now() + (50 * 60 * 1000);
+                            const expiryTime = Date.now() + TOKEN_EXPIRY_BUFFER_MS;
                             localStorage.setItem(GOOGLE_TOKEN_EXPIRY_KEY, expiryTime.toString());
                             
                             // Validate token immediately
@@ -1300,13 +1300,13 @@
                 } else {
                     // No existing file, just update status
                     syncStatus.innerHTML = '<span class="badge bg-info">No Data</span>';
-                    syncDetails.textContent = 'No saved progress found';
+                    syncDetails.textContent = 'Click to create new backup';
                 }
             } catch (error) {
                 console.error('Error loading from Drive:', error);
                 syncStatus.innerHTML = '<span class="badge bg-danger">Sync Failed</span>';
                 syncDetails.textContent = 'Click to retry sync';
-                showMessage('Failed to load progress. Please try again.', 'warning', true);
+                showMessage('Failed to load progress. Click the sync button to retry.', 'warning', true);
             }
         }
 
